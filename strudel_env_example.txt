@@ -1,6 +1,0 @@
-# Copy this file to .env and fill in the values locally.
-# Never commit .env or paste real secrets into HTML, JavaScript or GitHub.
-
-DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
-COMPANIES_HOUSE_API_KEY=replace_with_rotated_key
-PORT=3000
