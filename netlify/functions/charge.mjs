@@ -1,0 +1,2 @@
+import {companiesHouse,json,errorResponse} from './shared.mjs';
+export default async request=>{try{const u=new URL(request.url),number=u.searchParams.get('company'),charge=u.searchParams.get('charge');if(!number||!charge)return json({error:'company and charge are required'},400);return json(await companiesHouse(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(number)}/charges/${encodeURIComponent(charge)}`))}catch(e){return errorResponse(e)}};
