@@ -1,2 +1,83 @@
-import {companiesHouse,db,json,errorResponse} from './shared.mjs';
-export default async request=>{try{const n=new URL(request.url).searchParams.get('number')?.trim().toUpperCase();if(!n)return json({error:'A company number is required'},400);const [company,officers,charges]=await Promise.all([companiesHouse(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(n)}`),companiesHouse(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(n)}/officers`),companiesHouse(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(n)}/charges`)]);const a=company.registered_office_address||{};const saved=await db().query(`INSERT INTO companies(company_number,name,normalized_name,company_status,company_type,incorporation_date,dissolution_date,sic_codes,registered_address,postcode,last_fetched_at,raw_data) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),$11) ON CONFLICT(company_number) DO UPDATE SET name=EXCLUDED.name,normalized_name=EXCLUDED.normalized_name,company_status=EXCLUDED.company_status,company_type=EXCLUDED.company_type,incorporation_date=EXCLUDED.incorporation_date,dissolution_date=EXCLUDED.dissolution_date,sic_codes=EXCLUDED.sic_codes,registered_address=EXCLUDED.registered_address,postcode=EXCLUDED.postcode,last_fetched_at=NOW(),raw_data=EXCLUDED.raw_data,updated_at=NOW() RETURNING id`,[company.company_number,company.company_name,company.company_name.toLowerCase(),company.company_status||null,company.type||null,company.date_of_creation||null,company.date_of_cessation||null,company.sic_codes||[],a,a.postal_code||null,company]);for(const x of charges.items||[]){await db().query(`INSERT INTO charges(company_id,external_charge_id,created_on,delivered_on,status,satisfied_on,description,persons_entitled_raw,raw_data,last_fetched_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()) ON CONFLICT(company_id,external_charge_id) DO UPDATE SET delivered_on=EXCLUDED.delivered_on,status=EXCLUDED.status,satisfied_on=EXCLUDED.satisfied_on,description=EXCLUDED.description,persons_entitled_raw=EXCLUDED.persons_entitled_raw,raw_data=EXCLUDED.raw_data,last_fetched_at=NOW()`,[saved.rows[0].id,x.charge_number||x.charge_code||String(x.created_on),x.created_on||null,x.delivered_on||null,x.status||null,x.satisfied_on||null,x.particulars?.description||x.description||null,x.persons_entitled||[],x])}return json({company,officers:officers.items||[],charges:charges.items||[],stored_id:saved.rows[0].id})}catch(e){return errorResponse(e)}};
+import { companiesHouse, db, json, errorResponse } from './shared.mjs';
+
+export default async (request) => {
+  try {
+    const number = new URL(request.url).searchParams.get('number')?.trim().toUpperCase();
+    if (!number) return json({ error: 'A company number is required' }, 400);
+
+    const [company, officers, charges] = await Promise.all([
+      companiesHouse(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(number)}`),
+      companiesHouse(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(number)}/officers`),
+      companiesHouse(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(number)}/charges`)
+    ]);
+
+    const address = company.registered_office_address || {};
+    const saved = await db().query(`
+      INSERT INTO companies
+        (company_number, name, normalized_name, company_status, company_type,
+         incorporation_date, dissolution_date, sic_codes, registered_address,
+         postcode, last_fetched_at, raw_data)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),$11)
+      ON CONFLICT (company_number) DO UPDATE SET
+        name=EXCLUDED.name,
+        normalized_name=EXCLUDED.normalized_name,
+        company_status=EXCLUDED.company_status,
+        company_type=EXCLUDED.company_type,
+        incorporation_date=EXCLUDED.incorporation_date,
+        dissolution_date=EXCLUDED.dissolution_date,
+        sic_codes=EXCLUDED.sic_codes,
+        registered_address=EXCLUDED.registered_address,
+        postcode=EXCLUDED.postcode,
+        last_fetched_at=NOW(),
+        raw_data=EXCLUDED.raw_data,
+        updated_at=NOW()
+      RETURNING id`, [
+        company.company_number,
+        company.company_name,
+        company.company_name.toLowerCase(),
+        company.company_status || null,
+        company.type || null,
+        company.date_of_creation || null,
+        company.date_of_cessation || null,
+        company.sic_codes || [],
+        JSON.stringify(address),
+        address.postal_code || null,
+        JSON.stringify(company)
+      ]);
+
+    for (const charge of charges.items || []) {
+      await db().query(`
+        INSERT INTO charges
+          (company_id, external_charge_id, created_on, delivered_on, status,
+           satisfied_on, description, persons_entitled_raw, raw_data, last_fetched_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+        ON CONFLICT (company_id, external_charge_id) DO UPDATE SET
+          delivered_on=EXCLUDED.delivered_on,
+          status=EXCLUDED.status,
+          satisfied_on=EXCLUDED.satisfied_on,
+          description=EXCLUDED.description,
+          persons_entitled_raw=EXCLUDED.persons_entitled_raw,
+          raw_data=EXCLUDED.raw_data,
+          last_fetched_at=NOW()`, [
+          saved.rows[0].id,
+          charge.charge_number || charge.charge_code || String(charge.created_on || Date.now()),
+          charge.created_on || null,
+          charge.delivered_on || null,
+          charge.status || null,
+          charge.satisfied_on || null,
+          charge.particulars?.description || charge.description || null,
+          JSON.stringify(charge.persons_entitled || []),
+          JSON.stringify(charge)
+        ]);
+    }
+
+    return json({
+      company,
+      officers: officers.items || [],
+      charges: charges.items || [],
+      stored_id: saved.rows[0].id
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+};
