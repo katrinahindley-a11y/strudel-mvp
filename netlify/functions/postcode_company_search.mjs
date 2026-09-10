@@ -5,7 +5,7 @@ const ITEMS_PER_PAGE = 20;
 export default async (request) => {
   try {
     const url = new URL(request.url);
-    const postcode = url.searchParams.get('postcode')?.trim().toUpperCase();
+    const postcode = url.searchParams.get('postcode')?.trim().toUpperCase().replace(/\s+/g, '');
     const pageParam = url.searchParams.get('page');
 
     if (!postcode) {
@@ -25,8 +25,10 @@ export default async (request) => {
     const startIndex = (page - 1) * ITEMS_PER_PAGE;
 
     const endpoint = new URL(
-      'https://api.company-information.service.gov.uk/advanced-search/companies'
+      'https://api.company-information.service.gov.uk/search/companies'
     );
+    // Use the postcode as the main query term and also as location filter
+    endpoint.searchParams.set('q', postcode);
     endpoint.searchParams.set('location', postcode);
     endpoint.searchParams.set('items_per_page', String(ITEMS_PER_PAGE));
     endpoint.searchParams.set('start_index', String(startIndex));
