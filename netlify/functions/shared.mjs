@@ -28,6 +28,7 @@ export function json(data, status = 200) {
 
 export function errorResponse(error) {
   console.error(error);
+
   return json(
     { error: error.message || 'Unexpected error' },
     500
@@ -50,6 +51,7 @@ export async function companiesHouse(url) {
   });
 
   const body = await response.text();
+
   let data = null;
 
   if (body) {
