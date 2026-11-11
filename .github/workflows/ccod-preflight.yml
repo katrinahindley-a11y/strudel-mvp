@@ -41,9 +41,20 @@ jobs:
             exit 1
           fi
 
-          export PGDATABASE="$CCOD_TEST_DATABASE_URL"
+          case "$CCOD_TEST_DATABASE_URL" in
+            postgresql://*|postgres://*)
+              ;;
+            *)
+              echo "The database secret must be the connection URL only."
+              echo "Copy it from Neon without psql, quotes, or extra text."
+              exit 1
+              ;;
+          esac
 
-          psql -X --set=ON_ERROR_STOP=1 <<'SQL'
+          psql \
+            --dbname="$CCOD_TEST_DATABASE_URL" \
+            -X \
+            --set=ON_ERROR_STOP=1 <<'SQL'
           SELECT
             current_database() AS database_name,
             pg_size_pretty(
