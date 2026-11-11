@@ -35,7 +35,13 @@ function getOfficerId(item){const candidates=[item?.links?.self,item?.links?.off
 function officerAddress(item){return [item?.address?.address_line_1,item?.address?.address_line_2,item?.address?.locality,item?.address?.region,item?.address?.postal_code,item?.address?.country].filter(Boolean).join(', ')}
 async function getJSON(url,options){const response=await fetch(url,options);let data={};try{data=await response.json()}catch{}if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);return data}
 const ROUTES=[{path:'overview',label:'Overview'},{path:'search',label:'Search'},{path:'results',label:'Results'},{path:'leads',label:'Lead lists'},{path:'monitoring',label:'Monitoring'},{path:'lenders',label:'Lenders'}];
-function setNav(active){$('nav').innerHTML=ROUTES.map(r=>`<a href="#/${r.path}" class="${active===r.path?'active':''}">${r.label}</a>`).join('')}
+function setNav(active) {
+  $('nav').innerHTML =
+    ROUTES.map(r =>
+      `<a href="#/${r.path}" class="${active === r.path ? 'active' : ''}">${r.label}</a>`
+    ).join('') +
+    '<a href="/properties.html">Properties</a>';
+}
 function go(path){location.hash='#/'+path}
 function router(){const raw=(location.hash||'#/overview').replace(/^#\//,'');const [path,arg]=raw.split('/');setNav(path);window.scrollTo(0,0);if(path==='overview')renderOverview();else if(path==='search')renderSearch();else if(path==='results')renderResults();else if(path==='company'){const companyNumber=decodeURIComponent(arg||'');if(!companyNumber){renderResults();return}if(STATE.selectedCompanyNumber!==companyNumber||!STATE.companyData)loadCompanyProfile(companyNumber);else renderCompany(companyNumber,false)}else if(path==='officer'){const officerId=decodeURIComponent(arg||'');if(!officerId){renderSearch();return}if(STATE.selectedOfficerId!==officerId||!STATE.officerData)loadOfficerAppointments(officerId);else renderOfficerProfile(officerId,false)}else if(path==='lenders')renderLenders();else if(path==='leads')renderLeads();else if(path==='monitoring')renderMonitoring();else renderOverview()}
 window.addEventListener('hashchange',router);
