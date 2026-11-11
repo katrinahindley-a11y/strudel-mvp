@@ -9,9 +9,10 @@ function reply(data, status = 200) {
 }
 
 export default async (request) => {
-  // Keep this temporary diagnostic off the production site.
-  if (process.env.CONTEXT !== 'deploy-preview' &&
-      process.env.CONTEXT !== 'branch-deploy') {
+  // Allow this temporary diagnostic only on the PR #5 preview.
+  const hostname = new URL(request.url).hostname;
+
+  if (hostname !== 'deploy-preview-5--strudelproperty.netlify.app') {
     return reply({ error: 'Preview environments only' }, 404);
   }
 
