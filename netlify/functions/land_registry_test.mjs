@@ -59,6 +59,40 @@ export default async (request) => {
       }, 502);
     }
 
+    const downloadCheck = await fetch(
+      'https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/CCOD_FULL_2026_11.zip',
+      {
+        headers: {
+          Authorization: key,
+          Accept: 'application/json'
+        },
+        signal: AbortSignal.timeout(15000),
+        redirect: 'error'
+      }
+    );
+
+    if (!downloadCheck.ok) {
+      return reply({
+        connected: true,
+        download_access: false,
+        upstream_status: downloadCheck.status,
+        error: 'Metadata works, but the download-link request failed.'
+      }, 502);
+    }
+
+    const downloadBody = await downloadCheck.json();
+
+    if (
+      downloadBody.success !== true ||
+      typeof downloadBody.result?.download_url !== 'string'
+    ) {
+      return reply({
+        connected: true,
+        download_access: false,
+        error: 'No download link was returned.'
+      }, 502);
+    }
+
     const dataset = body.result;
     const resources = Array.isArray(dataset.resources)
       ? dataset.resources
@@ -66,6 +100,7 @@ export default async (request) => {
 
     return reply({
       connected: true,
+      download_access: true,
       dataset: dataset.name,
       title: dataset.title,
       last_updated: dataset.last_updated,
@@ -76,7 +111,7 @@ export default async (request) => {
         file_size: file.file_size,
         row_count: file.row_count
       })),
-      note: 'Metadata access confirmed. Download permission is not yet tested.'
+      note: 'Download-link access confirmed. No file downloaded and no database changed.'
     });
   } catch {
     return reply({
