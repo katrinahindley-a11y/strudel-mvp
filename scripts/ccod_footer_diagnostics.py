@@ -27,6 +27,10 @@ class FooterReader(BaseReader):
         except csv.Error:
             detail['is_last_csv_record'] = False
             detail['following_csv_syntax_error'] = True
+        if len(values) == 2 and detail['is_last_csv_record'] and len(values[0]) <= 128:
+            count_text = values[1].strip()
+            if re.fullmatch(r'[0-9]{1,12}', count_text) and int(count_text) == self.record_number - 1:
+                detail['first_field_exact'] = values[0]
         inspected = []
         labels = {'eof', 'end', 'end of file', 'total', 'total records', 'total record count', 'record count', 'records', 'total number of records'}
         for index, value in enumerate(values):
@@ -40,7 +44,7 @@ class FooterReader(BaseReader):
                 item['numeric_value'] = number
                 item['matches_preceding_data_records'] = number == self.record_number - 1
             else:
-                item['classification'] = 'unrecognised value; content withheld'
+                item['classification'] = 'unrecognised value; content withheld except conditional first_field_exact'
             inspected.append(item)
         detail['short_row_fields'] = inspected
         raise SafeError('Short-row inspection only; not accepted as footer: ' + json.dumps(detail, sort_keys=True))
