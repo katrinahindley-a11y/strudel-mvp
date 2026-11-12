@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 import re
 import sys
@@ -8,54 +9,63 @@ import ccod_csv_diagnostics as diagnostic
 BaseReader = csv.DictReader
 
 class FooterReader(BaseReader):
-    record_number = 0
+    data_count = 0
+    footer_verified = False
 
     def __next__(self):
+        if self.footer_verified:
+            raise StopIteration
         try:
             row = super().__next__()
+        except StopIteration:
+            raise SafeError('Required Row Count: footer missing') from None
         except csv.Error:
             raise SafeError('CSV syntax error at physical line ' + str(self.reader.line_num)) from None
-        self.record_number += 1
-        missing = [name for name in self.fieldnames if row.get(name) is None]
-        extra = len(row.get(None, []))
-        if not missing and None not in row:
-            return row
         values = [row[name] for name in self.fieldnames if row.get(name) is not None] + row.get(None, [])
-        detail = dict(record_number=self.record_number, physical_line_end=self.line_num, expected_fields=len(self.fieldnames), actual_fields=len(values), preceding_data_records=self.record_number - 1)
+        if row.get(self.fieldnames[0]) == 'Row Count:':
+            if len(values) != 2 or None in row:
+                raise SafeError('Row Count: footer must have exactly two fields')
+            if not re.fullmatch(r'[0-9]{1,12}', values[1]) or int(values[1]) != self.data_count:
+                raise SafeError('Footer count does not match preceding data records')
+            try:
+                following = next(self.reader, None)
+            except csv.Error:
+                raise SafeError('CSV syntax error after footer') from None
+            if following is not None:
+                raise SafeError('CSV record follows Row Count: footer')
+            self.footer_verified = True
+            print(json.dumps({'footer_verified': True, 'source_data_records': self.data_count}), flush=True)
+            raise StopIteration
+        if None in row or any(value is None for value in row.values()):
+            raise SafeError('Malformed data row at record ' + str(self.data_count + 1))
+        self.data_count += 1
+        return row
+
+def self_test():
+    prefix = 'a,b,c\n1,2,3\n'
+    reader = FooterReader(io.StringIO(prefix + 'Row Count:,1\n'), strict=True)
+    if list(reader) != [{'a': '1', 'b': '2', 'c': '3'}] or not reader.footer_verified:
+        raise AssertionError('Valid footer handling failed')
+    cases = [prefix + 'Row Count:,2\n', prefix + 'Row Count:,1\n4,5,6\n', prefix + 'Bad Label,1\n', prefix, prefix + 'Row Count:,1,extra\n', prefix + 'Row Count:,not-a-number\n', 'a,b,c\n1,2\nRow Count:,1\n', prefix + 'Row Count:,1\nRow Count:,1\n']
+    for text in cases:
         try:
-            detail['is_last_csv_record'] = next(self.reader, None) is None
-        except csv.Error:
-            detail['is_last_csv_record'] = False
-            detail['following_csv_syntax_error'] = True
-        if len(values) == 2 and detail['is_last_csv_record'] and len(values[0]) <= 128:
-            count_text = values[1].strip()
-            if re.fullmatch(r'[0-9]{1,12}', count_text) and int(count_text) == self.record_number - 1:
-                detail['first_field_exact'] = values[0]
-        inspected = []
-        labels = {'eof', 'end', 'end of file', 'total', 'total records', 'total record count', 'record count', 'records', 'total number of records'}
-        for index, value in enumerate(values):
-            text = value.strip()
-            item = dict(position=index + 1, character_count=len(text))
-            normalized = re.sub(r'[_:\s-]+', ' ', text.lower()).strip()
-            if normalized in labels:
-                item['recognised_label'] = normalized
-            elif re.fullmatch(r'[0-9]{1,12}', text):
-                number = int(text)
-                item['numeric_value'] = number
-                item['matches_preceding_data_records'] = number == self.record_number - 1
-            else:
-                item['classification'] = 'unrecognised value; content withheld except conditional first_field_exact'
-            inspected.append(item)
-        detail['short_row_fields'] = inspected
-        raise SafeError('Short-row inspection only; not accepted as footer: ' + json.dumps(detail, sort_keys=True))
+            list(FooterReader(io.StringIO(text), strict=True))
+        except SafeError:
+            pass
+        else:
+            raise AssertionError('Invalid footer or malformed row accepted')
+    print(str(len(cases) + 1) + ' footer tests passed; no credentials or database used.')
 
 if __name__ == '__main__':
     try:
-        diagnostic.DiagnosticReader = FooterReader
-        diagnostic.main()
+        if sys.argv[1:] == ['--self-test']:
+            self_test()
+        else:
+            diagnostic.DiagnosticReader = FooterReader
+            diagnostic.main()
     except SafeError as error:
-        print('CCOD footer inspection stopped: ' + str(error), file=sys.stderr)
+        print('CCOD validation stopped: ' + str(error), file=sys.stderr)
         sys.exit(1)
     except Exception as error:
-        print('CCOD footer inspection failed: ' + type(error).__name__ + '; sensitive details suppressed.', file=sys.stderr)
+        print('CCOD validation failed: ' + type(error).__name__ + '; sensitive details suppressed.', file=sys.stderr)
         sys.exit(1)
