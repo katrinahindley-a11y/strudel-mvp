@@ -1,51 +1,52 @@
-name: CCOD guarded test import
+name: CCOD importer tests (no Neon)
 
 on:
+  push:
+    branches: [land-registry-full-import]
+    paths:
+      - scripts/ccod_import.py
+      - tests/test_ccod_import.py
+      - migrations/001_property_ownership.sql
+      - .github/workflows/ccod-import.yml
   workflow_dispatch:
-    inputs:
-      mode:
-        description: Validate only, import first 1000 titles, or import full file
-        type: choice
-        options: [validate, sample, full]
-        default: validate
-        required: true
-      resource:
-        description: Exact CCOD full ZIP filename
-        default: CCOD_FULL_2026_11.zip
-        required: true
-      expected_titles:
-        description: Exact source CSV title count (required for full mode; 0 otherwise)
-        default: '0'
-        required: true
-      confirm_target:
-        description: Type england-wales-property-test for sample or full import
-        default: ''
-        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ccod-test-import
+  group: ccod-tests-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  import:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ccod_ci
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: ccod_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ccod_ci -d ccod_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install import dependencies
+      - name: Install pinned dependencies
         run: python -m pip install 'psycopg[binary]==3.2.3' 'requests==2.32.3'
-      - name: Validate or import into guarded test database
+      - name: Check Python syntax
+        run: python -m py_compile scripts/ccod_import.py tests/test_ccod_import.py
+      - name: Test fixtures and real inserts in disposable PostgreSQL
         env:
-          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
-          LAND_REGISTRY_API_KEY: ${{ secrets.LAND_REGISTRY_API_KEY }}
-          CCOD_MODE: ${{ inputs.mode }}
-          CCOD_RESOURCE: ${{ inputs.resource }}
-          CCOD_EXPECTED_TITLES: ${{ inputs.expected_titles }}
-          CCOD_CONFIRM_TARGET: ${{ inputs.confirm_target }}
-        run: python -u scripts/ccod_import.py
+          CCOD_CI_DATABASE_URL: postgresql://ccod_ci:disposable_ci_only@localhost:5432/ccod_ci
+        run: python -m unittest discover -s tests -p test_ccod_import.py -v
