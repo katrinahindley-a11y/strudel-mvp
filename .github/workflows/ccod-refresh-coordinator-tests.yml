@@ -1,0 +1,43 @@
+name: CCOD full-release coordinator tests (no Neon)
+
+on:
+  push:
+    branches: [land-registry-full-import]
+    paths:
+      - scripts/ccod_refresh_coordinator.py
+      - tests/test_ccod_refresh_coordinator.py
+      - .github/workflows/ccod-refresh-coordinator-tests.yml
+
+permissions:
+  contents: read
+
+jobs:
+  coordinator-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ccod_ci
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: ccod_refresh_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ccod_ci -d ccod_refresh_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned test dependency
+        run: python -m pip install 'psycopg[binary]==3.2.3'
+      - name: Test synthetic full releases in disposable PostgreSQL
+        env:
+          CCOD_REFRESH_CI_URL: postgresql://ccod_ci:disposable_ci_only@localhost:5432/ccod_refresh_ci
+        run: python -m unittest discover -s tests -p test_ccod_refresh_coordinator.py -v
