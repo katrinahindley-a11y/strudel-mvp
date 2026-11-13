@@ -114,15 +114,15 @@ def main():
                     summary = refresh_archive(conn, archive, resource)
                     if summary.get('status') != 'applied_in_transaction':
                         raise SafeError('Unexpected coordinator result')
-                applied = conn.execute('SELECT snapshot_month, source_sha256, source_count, qualified_count FROM ccod_import.refresh_runs ORDER BY snapshot_month DESC LIMIT 1').fetchone()
-                if applied != (month, source_hash, summary['source_count'], summary['qualified_count']):
-                    raise SafeError('Applied release record verification failed; review required')
-                if conn.execute('SELECT EXISTS (SELECT 1 FROM public.property_titles t LEFT JOIN ccod_import.refresh_membership m USING (title_number) WHERE m.title_number IS NULL)').fetchone()[0]:
-                    raise SafeError('Refresh left a title without membership; review required')
-                with conn.transaction():
-                    repeat = refresh_archive(conn, archive, resource)
-                    if repeat.get('status') != 'already_applied' or repeat.get('persistent_changes') is not False:
-                        raise SafeError('Repeat same-release no-op check failed')
+                    applied = conn.execute('SELECT snapshot_month, source_sha256, source_count, qualified_count FROM ccod_import.refresh_runs ORDER BY snapshot_month DESC LIMIT 1').fetchone()
+                    if applied != (month, source_hash, summary['source_count'], summary['qualified_count']):
+                        raise SafeError('Applied release record verification failed; review required')
+                    if conn.execute('SELECT EXISTS (SELECT 1 FROM public.property_titles t LEFT JOIN ccod_import.refresh_membership m USING (title_number) WHERE m.title_number IS NULL)').fetchone()[0]:
+                        raise SafeError('Refresh left a title without membership; review required')
+                    with conn.transaction():
+                        repeat = refresh_archive(conn, archive, resource)
+                        if repeat.get('status') != 'already_applied' or repeat.get('persistent_changes') is not False:
+                            raise SafeError('Repeat same-release no-op check failed')
                 report = dict(status='newer_release_applied', target=importer.TARGET, release_month=month.isoformat(), resource=resource, source_sha256=source_hash, source_count=summary['source_count'], qualified_count=summary['qualified_count'], actions=summary.get('actions', {}), initial_counts=before_counts, initial_tracking_counts=before_tracking, final_counts=importer.counts(conn), final_tracking_counts=tracking_counts(conn), repeat_same_release=repeat['status'], schedule_status='disabled')
                 print(json.dumps(report, indent=2))
                 print('Newer CCOD release applied to the guarded test database. Monthly schedule remains disabled.')
@@ -134,5 +134,5 @@ if __name__ == '__main__':
         print('CCOD newer-release refresh stopped: ' + str(error), file=sys.stderr)
         sys.exit(1)
     except Exception as error:
-        print('CCOD newer-release refresh failed: ' + type(error).__name__ + '; transaction rolled back, sensitive details suppressed.', file=sys.stderr)
+        print('CCOD newer-release refresh failed: ' + type(error).__name__ + '; database commit status is not confirmed by this message. Review before retrying; sensitive details suppressed.', file=sys.stderr)
         sys.exit(1)
