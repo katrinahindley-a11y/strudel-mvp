@@ -1,0 +1,78 @@
+name: CCOD connection check
+
+on:
+  push:
+    branches:
+      - land-registry-full-import
+    paths:
+      - .github/workflows/ccod-preflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Install database client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Check secrets and read database information
+        env:
+          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
+          LAND_REGISTRY_API_KEY: ${{ secrets.LAND_REGISTRY_API_KEY }}
+          PGCONNECT_TIMEOUT: "20"
+          PGOPTIONS: "-c default_transaction_read_only=on -c statement_timeout=30000"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "$CCOD_TEST_DATABASE_URL" ]; then
+            echo "Missing CCOD_TEST_DATABASE_URL secret."
+            exit 1
+          fi
+
+          if [ -z "$LAND_REGISTRY_API_KEY" ]; then
+            echo "Missing LAND_REGISTRY_API_KEY secret."
+            exit 1
+          fi
+
+          case "$CCOD_TEST_DATABASE_URL" in
+            postgresql://*|postgres://*)
+              ;;
+            *)
+              echo "The database secret must be the connection URL only."
+              echo "Copy it from Neon without psql, quotes, or extra text."
+              exit 1
+              ;;
+          esac
+
+          psql \
+            --dbname="$CCOD_TEST_DATABASE_URL" \
+            -X \
+            --set=ON_ERROR_STOP=1 <<'SQL'
+          SELECT
+            current_database() AS database_name,
+            pg_size_pretty(
+              pg_database_size(current_database())
+            ) AS current_database_size;
+
+          SELECT 'property_titles' AS table_name, COUNT(*) AS row_count
+          FROM public.property_titles
+
+          UNION ALL
+
+          SELECT 'property_proprietors', COUNT(*)
+          FROM public.property_proprietors
+
+          UNION ALL
+
+          SELECT 'property_charge_matches', COUNT(*)
+          FROM public.property_charge_matches;
+          SQL
+
+          echo "Database connection check completed. No records changed."

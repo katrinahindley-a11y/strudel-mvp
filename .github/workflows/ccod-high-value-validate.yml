@@ -1,0 +1,38 @@
+name: CCOD five-million-pound selection validation
+
+on:
+  push:
+    branches: [land-registry-full-import]
+    paths: [.github/workflows/ccod-high-value-validate.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ccod-high-value-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check Python syntax
+        run: python -m py_compile scripts/ccod_footer_diagnostics.py scripts/ccod_csv_diagnostics.py scripts/ccod_high_value_validate.py scripts/ccod_import.py
+      - name: Test structural diagnostics without credentials
+        run: python scripts/ccod_csv_diagnostics.py --self-test
+      - name: Test strict footer handling without credentials
+        run: python scripts/ccod_footer_diagnostics.py --self-test
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check 'psycopg[binary]>=3.2,<4' requests
+      - name: Complete full November CCOD five-million validation without database writes
+        env:
+          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
+          LAND_REGISTRY_API_KEY: ${{ secrets.LAND_REGISTRY_API_KEY }}
+          PGOPTIONS: '-c default_transaction_read_only=on'
+          PYTHONUNBUFFERED: '1'
+        run: python scripts/ccod_footer_diagnostics.py
