@@ -1,0 +1,67 @@
+name: CCOD PR integration tests (disposable database)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/ccod-pr-integration-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [import, refresh_schema, refresh_update, refresh_coordinator]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ccod_ci
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: ccod_refresh_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ccod_ci -d ccod_refresh_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out this PR
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Get existing synthetic tests and fixture schema
+        uses: actions/checkout@v4
+        with:
+          repository: katrinahindley-a11y/strudel-mvp
+          ref: 3c54309e0dffc4f814ae5194cae4d953b8c40654
+          path: test-support
+          persist-credentials: false
+      - name: Stage test fixtures without replacing PR scripts
+        run: |
+          mkdir -p tests
+          cp test-support/tests/test_ccod_import.py tests/
+          cp test-support/tests/test_ccod_refresh_schema.py tests/
+          cp test-support/tests/test_ccod_refresh_update.py tests/
+          cp test-support/tests/test_ccod_refresh_coordinator.py tests/
+          cp test-support/migrations/002_ccod_refresh_state.sql migrations/
+          rm -rf test-support
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned dependencies
+        run: python -m pip install 'psycopg[binary]==3.2.3' 'requests==2.32.3'
+      - name: Compile PR scripts
+        run: python -m compileall -q scripts
+      - name: Test real helpers with synthetic records in temporary PostgreSQL
+        env:
+          CCOD_REFRESH_CI_URL: postgresql://ccod_ci:disposable_ci_only@localhost:5432/ccod_refresh_ci
+          CCOD_CI_DATABASE_URL: postgresql://ccod_ci:disposable_ci_only@localhost:5432/ccod_refresh_ci
+          SUITE: ${{ matrix.suite }}
+        run: python -m unittest discover -s tests -p "test_ccod_${SUITE}.py" -v
