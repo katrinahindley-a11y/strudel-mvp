@@ -50,6 +50,12 @@ export default async (request) => {
     const escaped = query.replace(/[\\%_]/g, '\\$&');
     const parameters = [tenure, query, `%${escaped}%`, `%${escaped.replace(/\s/g, '')}%`];
     const filter = `t.source_dataset = 'CCOD'
+      AND EXISTS (
+        SELECT 1 FROM ccod_import.refresh_membership m
+        WHERE m.title_number = t.title_number
+          AND m.managed_high_value = true
+          AND m.active = true
+      )
       AND ($1::text = '' OR t.tenure = $1)
       AND ($2::text = '' OR t.property_address ILIKE $3 OR t.title_number ILIKE $3
         OR REPLACE(t.postcode, ' ', '') ILIKE $4
