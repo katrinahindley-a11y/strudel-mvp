@@ -1,6 +1,9 @@
 import pg from 'pg';
 
-const PREVIEW = 'deploy-preview-5--strudelproperty.netlify.app';
+const ALLOWED_HOSTS = new Set([
+  'strudelproperty.netlify.app',
+  'deploy-preview-5--strudelproperty.netlify.app'
+]);
 const HOST = 'ep-divine-mud-za5xlaae.c-2.eu-west-2.aws.neon.tech';
 const TARGET = 'england-wales-property-test';
 let pool;
@@ -11,7 +14,9 @@ function reply(data, status = 200) {
 
 export default async (request) => {
   const url = new URL(request.url);
-  if (url.hostname !== PREVIEW) return reply({ error: 'PR5 preview only' }, 404);
+  if (!ALLOWED_HOSTS.has(url.hostname)) {
+    return reply({ error: 'Property search is not enabled on this hostname' }, 404);
+  }
   if (request.method !== 'GET') return reply({ error: 'GET required' }, 405);
   const query = (url.searchParams.get('q') || '').trim();
   const tenure = (url.searchParams.get('tenure') || '').trim();
