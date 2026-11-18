@@ -1,4 +1,5 @@
 [build]
+  command = "node scripts/prepare_property_preview.mjs"
   publish = "."
   functions = "netlify/functions"
 

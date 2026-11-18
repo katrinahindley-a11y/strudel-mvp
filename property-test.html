@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Strudel - test database property check</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#182331}input,button{font:inherit;padding:10px}input{max-width:100%;box-sizing:border-box}form{display:flex;flex-wrap:wrap;gap:12px;align-items:center}article{border:1px solid #ccd3dc;padding:16px;margin:16px 0;border-radius:8px}h2{font-size:1.2rem}.notice{background:#fff4cf;padding:16px}#status{white-space:pre-wrap}li{margin:8px 0}
+</style>
+</head>
+<body>
+<h1>Test database property check</h1>
+<p class="notice">PR #5 preview only. This is a read-only diagnostic, not the production property search. It has no Mayfair postcode restriction. No records are changed.</p>
+<form id="search">
+<label for="title">Exact title number (optional)</label>
+<input id="title" name="title" maxlength="50" autocomplete="off">
+<button type="submit">Check records</button>
+</form>
+<p>Leave the title blank to show up to 20 of the most recently imported titles. Company-number candidates are not verified company identities.</p>
+<p id="status" role="status" aria-live="polite"></p>
+<section id="results" aria-label="Property records"></section>
+<script type="module">
+const form = document.querySelector('#search');
+const status = document.querySelector('#status');
+const results = document.querySelector('#results');
+const button = form.querySelector('button');
+function add(parent, tag, text) {
+  const element = document.createElement(tag);
+  element.textContent = text;
+  parent.append(element);
+  return element;
+}
+async function load(event) {
+  event?.preventDefault();
+  results.replaceChildren();
+  if (location.hostname !== 'deploy-preview-5--strudelproperty.netlify.app') {
+    status.textContent = 'This check is available only on the PR #5 deploy preview.';
+    return;
+  }
+  status.textContent = 'Reading the guarded test database...';
+  button.disabled = true;
+  try {
+    const query = new URLSearchParams({ title: document.querySelector('#title').value.trim() });
+    const response = await fetch('/.netlify/functions/property_test_search?' + query, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Test request failed');
+    if (data.target !== 'england-wales-property-test' || !Array.isArray(data.items)) throw new Error('Unexpected test response');
+    status.textContent = `Target: ${data.target}\nTitles: ${data.counts.titles} | Proprietors: ${data.counts.proprietors} | Charge matches: ${data.counts.charge_matches}\nShowing ${data.items.length} records.`;
+    if (!data.items.length) add(results, 'p', 'No matching title found in this test database.');
+    for (const item of data.items) {
+      const card = document.createElement('article');
+      results.append(card);
+      add(card, 'h2', item.title_number);
+      add(card, 'p', item.property_address || 'Address not supplied');
+      add(card, 'p', `${item.postcode || 'No postcode'} | ${item.tenure} | Source: ${item.source_dataset} | Snapshot: ${String(item.source_snapshot_month).slice(0, 10)}`);
+      const owners = add(card, 'ul', '');
+      for (const owner of item.proprietors) add(owners, 'li', `${owner.position}. ${owner.name} | Registration: ${owner.registration_number_raw || 'not supplied'} | Candidate: ${owner.company_number_candidate || 'none'} | Match: ${owner.company_match_status}`);
+    }
+  } catch (error) {
+    status.textContent = error.message || 'Unable to read test records.';
+  } finally {
+    button.disabled = false;
+  }
+}
+form.addEventListener('submit', load);
+load();
+</script>
+</body>
+</html>
