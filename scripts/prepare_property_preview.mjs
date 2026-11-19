@@ -36,8 +36,8 @@ export function prepareCharges(source) {
 }
 
 const production = process.env.CONTEXT === 'production';
-const pr5Preview = process.env.CONTEXT === 'deploy-preview' && process.env.REVIEW_ID === '5';
-if (production || pr5Preview) {
+const preview = process.env.CONTEXT === 'deploy-preview';
+if (production || preview) {
   const html = prepare(readFileSync('properties.html', 'utf8'));
   const charges = prepareCharges(readFileSync('netlify/functions/property_charges.mjs', 'utf8'));
   writeFileSync('properties.html', html);
