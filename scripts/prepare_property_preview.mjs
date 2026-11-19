@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const replacements = [
   ["<title>Cohort Capital — Mayfair Property Ownership</title>", "<title>Cohort Capital — Corporate Property Ownership</title>"],
   ["<h1>Mayfair property ownership</h1>", "<h1>Corporate property ownership — recorded price above £5 million</h1>"],
-  ["Pilot area: W1J, W1K and W1S, not an exact Mayfair boundary. UK corporate ownership data only; overseas-company and individual ownership are not included. Registered titles are not necessarily separate buildings.", "Limited England-and-Wales CCOD subset: active managed titles selected by recorded price paid above £5 million, not current market valuation. Retained sample-only and retired records are excluded. No Mayfair postcode restriction. This is not a complete register of all property or all corporate ownership. Overseas-company and individual ownership are not included. Registered titles are not necessarily separate buildings. Source release is shown on each result; monthly automatic refresh is not enabled. Charge checks are on-demand Companies House title-number lookups, not Land Registry mortgage verification. Company-profile links are disabled."],
+  ["Pilot area: W1J, W1K and W1S, not an exact Mayfair boundary. UK corporate ownership data only; overseas-company and individual ownership are not included. Registered titles are not necessarily separate buildings.", "Limited England-and-Wales CCOD subset: active managed titles selected by recorded price paid above £5 million, not current market valuation. Retained sample-only and retired records are excluded. This is not a complete register of all property or all corporate ownership. Overseas-company and individual ownership are not included. Registered titles are not necessarily separate buildings. Source release is shown on each result. Charge checks are on-demand Companies House title-number lookups, not Land Registry mortgage verification."],
   ['placeholder="e.g. Hanover Square or W1K"', 'placeholder="e.g. address, postcode, title or owner"'],
   ["'/.netlify/functions/property_search?'", "'/.netlify/functions/property_preview_search?'"],
   ["'/.netlify/functions/property_charges?'", "'/.netlify/functions/property_preview_charges?'"],
@@ -36,8 +36,8 @@ export function prepareCharges(source) {
 }
 
 const production = process.env.CONTEXT === 'production';
-const pr5Preview = process.env.CONTEXT === 'deploy-preview' && process.env.REVIEW_ID === '5';
-if (production || pr5Preview) {
+const preview = process.env.CONTEXT === 'deploy-preview';
+if (production || preview) {
   const html = prepare(readFileSync('properties.html', 'utf8'));
   const charges = prepareCharges(readFileSync('netlify/functions/property_charges.mjs', 'utf8'));
   writeFileSync('properties.html', html);
