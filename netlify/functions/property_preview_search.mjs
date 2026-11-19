@@ -2,7 +2,8 @@ import pg from 'pg';
 
 const ALLOWED_HOSTS = new Set([
   'strudelproperty.netlify.app',
-  'deploy-preview-5--strudelproperty.netlify.app'
+  'deploy-preview-5--strudelproperty.netlify.app',
+  'deploy-preview-10--strudelproperty.netlify.app'
 ]);
 const HOST = 'ep-divine-mud-za5xlaae.c-2.eu-west-2.aws.neon.tech';
 const TARGET = 'england-wales-property-test';
