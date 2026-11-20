@@ -1,0 +1,72 @@
+name: Nautilina reviewed snapshot publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_publication:
+        description: 'Publish reviewed snapshot 91c009ef-3883-4b18-9b56-f194da20a1df for company 15372161 to the app database'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nautilina-charge-staging-pilot
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require main and explicit publication confirmation
+        env:
+          CONFIRM_PUBLICATION: ${{ inputs.confirm_publication }}
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$CONFIRM_PUBLICATION" = 'true'
+      - uses: actions/checkout@v4
+        with:
+          ref: bfeceb435c018f6665abbcfd6a9fef440c34b70b
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies without lifecycle scripts
+        run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
+      - name: Run charge component tests without credentials
+        run: node --test tests/collect_company_charges.test.mjs tests/stage_company_charge_scan.test.mjs tests/publish_company_charge_scan.test.mjs tests/run_company_charge_import.test.mjs
+      - name: Publish only the reviewed snapshot without API requests
+        env:
+          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { runManualImport } from './scripts/run_company_charge_import.mjs';
+          const safe = new Set([
+            'TEST_DATABASE_URL_REQUIRED', 'INVALID_TEST_DATABASE_URL',
+            'UNAPPROVED_DATABASE_ENDPOINT', 'DATABASE_OVERRIDE_REJECTED',
+            'TARGET_GUARD_FAILED', 'SCAN_NOT_CURRENT_COMPLETE_OR_FRESH',
+            'INVALID_CHARGE_SNAPSHOT', 'PROPRIETOR_NAME_REQUIRES_REVIEW',
+            'MISSING_CHARGE_IDENTIFIER', 'DUPLICATE_INCOMING_CHARGE',
+            'AMBIGUOUS_STORED_CHARGE', 'DUPLICATE_OUTPUT_IDENTIFIER',
+            'STORED_CHARGES_MISSING_FROM_SNAPSHOT_REVIEW_REQUIRED',
+            'PUBLICATION_OWNERSHIP_LOST', 'CHARGE_PUBLICATION_FAILED'
+          ]);
+          try {
+            const result = await runManualImport([
+              '--company', '15372161',
+              '--publish-scan', '91c009ef-3883-4b18-9b56-f194da20a1df',
+              '--apply'
+            ]);
+            console.log(JSON.stringify(result));
+          } catch (error) {
+            console.error(JSON.stringify({
+              error: 'MANUAL_CHARGE_PUBLICATION_FAILED',
+              diagnostic: safe.has(error?.message) ? error.message : 'UNCLASSIFIED_PUBLICATION_FAILURE',
+              note: 'No credentials or raw exceptions are logged. Verify publication state before retrying.'
+            }));
+            process.exitCode = 1;
+          }
+          NODE
