@@ -1,0 +1,82 @@
+name: Mayfair charge staging batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      company_numbers:
+        description: 'Comma-separated Companies House company numbers to stage'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mayfair-charge-staging-batch
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bfeceb435c018f6665abbcfd6a9fef440c34b70b
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies without lifecycle scripts
+        run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
+      - name: Stage approved company charge snapshots
+        env:
+          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
+          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
+          COMPANY_NUMBERS: ${{ inputs.company_numbers }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { runManualImport } from './scripts/run_company_charge_import.mjs';
+          const requested = (process.env.COMPANY_NUMBERS || '')
+            .split(',')
+            .map(value => value.trim())
+            .filter(Boolean);
+          if (!requested.length) {
+            console.error(JSON.stringify({ error: 'NO_COMPANY_NUMBERS_PROVIDED' }));
+            process.exitCode = 1;
+          }
+          const results = [];
+          for (const companyNumber of requested) {
+            try {
+              const result = await runManualImport([
+                '--company', companyNumber,
+                '--max-pages', '10',
+                '--max-requests', '12',
+                '--apply'
+              ]);
+              results.push({ companyNumber, status: 'staged', ...result });
+              console.log(JSON.stringify({ companyNumber, status: 'staged', scanId: result.scanId, charges: result.charges, pagesFetched: result.pagesFetched }));
+            } catch (error) {
+              const safeCodes = new Set([
+                'TEST_DATABASE_URL_REQUIRED', 'INVALID_TEST_DATABASE_URL',
+                'UNAPPROVED_DATABASE_ENDPOINT', 'DATABASE_OVERRIDE_REJECTED',
+                'COMPANIES_HOUSE_KEY_REQUIRED', 'TARGET_GUARD_FAILED',
+                'COMPANY_OUTSIDE_APPROVED_SCOPE', 'COMPANY_SCAN_ALREADY_RUNNING',
+                'COMPANY_IDENTITY_MISMATCH', 'PROPRIETOR_NAME_REQUIRES_REVIEW',
+                'INCOMPLETE_CHARGE_SCAN', 'SCAN_OWNERSHIP_LOST', 'CHARGE_SCAN_FAILED',
+                'INVALID_COMPANY_NUMBER', 'INVALID_ARGUMENTS', 'INVALID_REQUEST_BUDGET',
+                'REQUEST_BUDGET_EXHAUSTED', 'COMPANIES_HOUSE_RATE_LIMITED_STOP',
+                'COMPANIES_HOUSE_AUTHENTICATION_FAILED', 'COMPANIES_HOUSE_HTTP_FAILURE',
+                'COMPANIES_HOUSE_REQUEST_FAILED', 'COMPANIES_HOUSE_INVALID_JSON',
+                'UNAPPROVED_API_ENDPOINT', 'INVALID_API_PARAMETERS'
+              ]);
+              const diagnostic = safeCodes.has(error?.message) ? error.message : 'UNCLASSIFIED_BATCH_FAILURE';
+              results.push({ companyNumber, status: 'failed', diagnostic });
+              console.error(JSON.stringify({ companyNumber, error: 'MANUAL_CHARGE_IMPORT_FAILED', diagnostic, note: 'No credentials, raw exception details or API responses are logged.' }));
+            }
+          }
+          const staged = results.filter(result => result.status === 'staged').length;
+          const failed = results.filter(result => result.status === 'failed').length;
+          console.log(JSON.stringify({ summary: { requested: requested.length, staged, failed }, results }));
+          if (failed) process.exitCode = 1;
+          NODE
