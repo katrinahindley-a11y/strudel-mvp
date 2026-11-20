@@ -44,7 +44,7 @@
       company: ['Company name, company number or charge reference', 'e.g. Nautilina Limited or 15372161', 'Search companies and their charges. Company-level property associations are not proof that a charge covers each property.']
     }[current];
     form.querySelector('label[for="query"]').textContent = settings[0];
-    el('query').placeholder = settings[1]; help.textContent = settings[2];
+    el('query').placeholder = ''; help.textContent = settings[2];
     el('query').minLength = current === 'security_lender' ? 2 : 0;
     el('query').required = current !== 'property';
   }
