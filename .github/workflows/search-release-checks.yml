@@ -1,0 +1,68 @@
+name: Search release checks (no live services)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/search-release-checks.yml'
+      - 'properties.html'
+      - 'security-lender-search.js'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'netlify/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        context: [deploy-preview, production]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run lender matching and charge component tests without credentials
+        run: node --test tests/security_lender_matching.test.mjs tests/collect_company_charges.test.mjs tests/stage_company_charge_scan.test.mjs tests/publish_company_charge_scan.test.mjs tests/run_company_charge_import.test.mjs
+      - name: Generate deployment files without live services
+        env:
+          CONTEXT: ${{ matrix.context }}
+        run: node scripts/prepare_property_preview.mjs
+      - name: Check search and generated charge JavaScript syntax
+        run: |
+          node --check security-lender-search.js
+          node --check netlify/functions/property_preview_search.mjs
+          node --check netlify/functions/property_unified_search.mjs
+          node --check netlify/functions/property_security_lender_search.mjs
+          node --check netlify/functions/property_preview_charges.mjs
+      - name: Check generated page integration and empty search placeholder assignment
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { Script } from 'node:vm';
+          const html = readFileSync('properties.html', 'utf8');
+          const ui = readFileSync('security-lender-search.js', 'utf8');
+          assert.equal(html.split('<script src="/security-lender-search.js"></script>').length, 2);
+          assert.ok(html.includes('/.netlify/functions/property_preview_search?'));
+          assert.ok(ui.includes("el('query').placeholder = '';"));
+          const assignments = ui.match(/\.placeholder\s*=/g) || [];
+          assert.equal(assignments.length, 1);
+          const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+          assert.ok(inline.some(match => match[1].trim()));
+          for (const [index, match] of inline.entries()) {
+            if (match[1].trim()) new Script(match[1], { filename: 'properties-inline-' + index + '.js' });
+          }
+          for (const file of ['property_preview_search', 'property_unified_search', 'property_security_lender_search', 'property_preview_charges']) {
+            assert.ok(readFileSync('netlify/functions/' + file + '.mjs', 'utf8').includes('deploy-preview-11--strudelproperty.netlify.app'));
+          }
+          console.log('Static deployment checks passed. Interactive browser and live-service checks are separate.');
+          NODE
