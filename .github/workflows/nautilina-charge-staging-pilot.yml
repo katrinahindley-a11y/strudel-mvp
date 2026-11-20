@@ -1,0 +1,17 @@
+name: Nautilina charge staging pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  registration-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Refuse execution from registration stub
+        run: |
+          echo '::error::Registration only. Select feature/security-lender-property-search under Run workflow to run the reviewed staging pilot. This stub performs no import.'
+          exit 1
