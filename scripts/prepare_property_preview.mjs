@@ -20,6 +20,10 @@ export function prepare(html) {
   return html;
 }
 
+export function prepareSearchHost(source) {
+  return replaceOnce(source, "'deploy-preview-10--strudelproperty.netlify.app'", "'deploy-preview-10--strudelproperty.netlify.app', 'deploy-preview-11--strudelproperty.netlify.app'");
+}
+
 export function prepareCharges(source) {
   source = replaceOnce(source, "import { db, companiesHouse, json } from './shared.mjs';", "import { json } from './shared.mjs';\nimport { db, companiesHouse } from '../lib/property_preview_services.mjs';");
   source = replaceOnce(source, 'export default async (request) => {', "export default async (request) => {\n  const allowedHosts = new Set(['strudelproperty.netlify.app', 'deploy-preview-5--strudelproperty.netlify.app', 'deploy-preview-10--strudelproperty.netlify.app']);\n  if (!allowedHosts.has(new URL(request.url).hostname)) return json({ error: 'Property charge checks are not enabled on this hostname' }, 404);");
@@ -32,7 +36,7 @@ export function prepareCharges(source) {
               AND m.active = true
           )`);
   source = replaceOnce(source, 'for (let page = 0; page < 20; page += 1) {', 'for (let page = 0; page < 5; page += 1) {');
-  return source;
+  return prepareSearchHost(source);
 }
 
 const production = process.env.CONTEXT === 'production';
@@ -40,7 +44,10 @@ const preview = process.env.CONTEXT === 'deploy-preview';
 if (production || preview) {
   const html = prepare(readFileSync('properties.html', 'utf8'));
   const charges = prepareCharges(readFileSync('netlify/functions/property_charges.mjs', 'utf8'));
+  const searchFiles = ['netlify/functions/property_preview_search.mjs', 'netlify/functions/property_unified_search.mjs', 'netlify/functions/property_security_lender_search.mjs'];
+  const preparedSearches = searchFiles.map(path => [path, prepareSearchHost(readFileSync(path, 'utf8'))]);
   writeFileSync('properties.html', html);
   writeFileSync('netlify/functions/property_preview_charges.mjs', charges);
-  console.log('Prepared active managed CCOD property search and guarded on-demand charge checks. No database writes or refresh schedule changes.');
+  for (const [path, source] of preparedSearches) writeFileSync(path, source);
+  console.log('Prepared active managed CCOD property search and guarded on-demand charge checks, including the exact PR 11 preview hostname. No database writes or refresh schedule changes.');
 }
