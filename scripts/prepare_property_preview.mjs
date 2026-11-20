@@ -6,7 +6,8 @@ const replacements = [
   ["Pilot area: W1J, W1K and W1S, not an exact Mayfair boundary. UK corporate ownership data only; overseas-company and individual ownership are not included. Registered titles are not necessarily separate buildings.", "Limited England-and-Wales CCOD subset: active managed titles selected by recorded price paid above £5 million, not current market valuation. Retained sample-only and retired records are excluded. This is not a complete register of all property or all corporate ownership. Overseas-company and individual ownership are not included. Registered titles are not necessarily separate buildings. Source release is shown on each result. Charge checks are on-demand Companies House title-number lookups, not Land Registry mortgage verification."],
   ['placeholder="e.g. Hanover Square, 12345678 or Barclays"', 'placeholder="e.g. address, postcode, title, owner, company name, company number or lender"'],
   ["'/.netlify/functions/property_search?'", "'/.netlify/functions/property_preview_search?'"],
-  ["   const a=node('a',verified?'Open company profile':'Look up company candidate '+p.company_number_candidate);a.href='/index.html#/company/'+encodeURIComponent(p.company_number_candidate);li.append(a);", "   li.append(node('small','Company-number candidate: '+p.company_number_candidate+'. A Companies House lookup does not automatically verify the proprietor identity.'));"]
+  ["   const a=node('a',verified?'Open company profile':'Look up company candidate '+p.company_number_candidate);a.href='/index.html#/company/'+encodeURIComponent(p.company_number_candidate);li.append(a);", "   li.append(node('small','Company-number candidate: '+p.company_number_candidate+'. A Companies House lookup does not automatically verify the proprietor identity.'));"],
+  ['</script></body></html>', '</script><script src="/security-lender-search.js"></script></body></html>']
 ];
 
 export function replaceOnce(text, before, after) {
