@@ -26,7 +26,7 @@ export default async request => {
                COALESCE(NULLIF(ch.raw_data #>> '{particulars,description}', ''), NULLIF(ch.description, ''), ch.raw_data->>'description', '') AS particulars
         FROM public.charges ch
         WHERE (
-          strpos(lower(COALESCE(ch.persons_entitled_raw, '')), lower($1)) > 0
+          strpos(lower(COALESCE(ch.persons_entitled_raw::text, '')), lower($1)) > 0
           OR EXISTS (
             SELECT 1 FROM jsonb_array_elements(
               CASE WHEN jsonb_typeof(ch.raw_data->'persons_entitled') = 'array'
