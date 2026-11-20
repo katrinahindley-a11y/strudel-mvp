@@ -1,0 +1,47 @@
+name: Charge pipeline integration (disposable database)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'migrations/**'
+      - '.github/workflows/charge-pipeline-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  charge-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: charge_ci
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U charge_ci -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies without lifecycle scripts
+        run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
+      - name: Run charge component tests
+        run: node --test tests/collect_company_charges.test.mjs tests/stage_company_charge_scan.test.mjs tests/publish_company_charge_scan.test.mjs tests/run_company_charge_import.test.mjs
+      - name: Run JavaScript pipeline against real disposable Postgres
+        env:
+          CHARGE_CI_DATABASE_URL: postgresql://charge_ci:disposable_ci_only@localhost:5432/neondb
+        run: node tests/charge_pipeline_postgres.mjs
