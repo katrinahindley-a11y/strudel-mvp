@@ -53,6 +53,7 @@ export function createBudgetedClient({ apiKey, companyNumber, maxRequests = 12, 
     if (!response.ok) {
       if (response.status === 429) throw Error('COMPANIES_HOUSE_RATE_LIMITED_STOP');
       if ([401, 403].includes(response.status)) throw Error('COMPANIES_HOUSE_AUTHENTICATION_FAILED');
+      if (response.status === 404 && url.pathname === base) throw Error('COMPANY_PROFILE_NOT_FOUND');
       throw Error('COMPANIES_HOUSE_HTTP_FAILURE');
     }
     try {

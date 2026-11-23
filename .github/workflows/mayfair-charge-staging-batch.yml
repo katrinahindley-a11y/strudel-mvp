@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify charge diagnostics before accessing credentials
-        run: node --test tests/charge_scan_diagnostics.test.mjs tests/stage_company_charge_scan.test.mjs tests/charge_http_diagnostics.test.mjs
+        run: node --test tests/charge_scan_diagnostics.test.mjs tests/stage_company_charge_scan.test.mjs tests/charge_http_diagnostics.test.mjs tests/company_profile_not_found.test.mjs
       - name: Install dependencies without lifecycle scripts
         run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
       - name: Stage approved company charge snapshots
@@ -63,6 +63,7 @@ jobs:
               console.log(JSON.stringify({ companyNumber, status: 'staged', scanId: result.scanId, charges: result.charges, pagesFetched: result.pagesFetched }));
             } catch (error) {
               const safeCodes = new Set([
+                'COMPANY_PROFILE_NOT_FOUND',
                 'TEST_DATABASE_URL_REQUIRED', 'INVALID_TEST_DATABASE_URL',
                 'UNAPPROVED_DATABASE_ENDPOINT', 'DATABASE_OVERRIDE_REJECTED',
                 'COMPANIES_HOUSE_KEY_REQUIRED', 'TARGET_GUARD_FAILED',
@@ -82,9 +83,10 @@ jobs:
                 'UNAPPROVED_API_ENDPOINT', 'INVALID_API_PARAMETERS'
               ]);
               const diagnostic = safeCodes.has(error?.message) ? error.message : 'UNCLASSIFIED_BATCH_FAILURE';
-              const httpDetails = ['COMPANIES_HOUSE_HTTP_FAILURE', 'COMPANIES_HOUSE_RATE_LIMITED_STOP', 'COMPANIES_HOUSE_AUTHENTICATION_FAILED'].includes(diagnostic) ? (http?.failureDetails() || {}) : {};
-              results.push({ companyNumber, status: 'failed', diagnostic, ...httpDetails });
-              console.error(JSON.stringify({ companyNumber, error: 'MANUAL_CHARGE_IMPORT_FAILED', diagnostic, ...httpDetails, note: 'No credentials, raw exception details or API responses are logged.' }));
+              const httpDetails = ['COMPANY_PROFILE_NOT_FOUND', 'COMPANIES_HOUSE_HTTP_FAILURE', 'COMPANIES_HOUSE_RATE_LIMITED_STOP', 'COMPANIES_HOUSE_AUTHENTICATION_FAILED'].includes(diagnostic) ? (http?.failureDetails() || {}) : {};
+              const identityReviewRequired = diagnostic === 'COMPANY_PROFILE_NOT_FOUND';
+              results.push({ companyNumber, status: 'failed', diagnostic, identityReviewRequired, ...httpDetails });
+              console.error(JSON.stringify({ companyNumber, error: 'MANUAL_CHARGE_IMPORT_FAILED', diagnostic, identityReviewRequired, ...httpDetails, note: 'No credentials, raw exception details or API responses are logged.' }));
             }
           }
           const staged = results.filter(result => result.status === 'staged').length;
