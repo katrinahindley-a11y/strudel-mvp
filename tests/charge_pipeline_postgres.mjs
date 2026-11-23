@@ -39,6 +39,7 @@ async function main() {
       }
     } finally { client.release(); }
     await mkdir(join(temp, 'lib'));
+    await writeFile(join(temp, 'lib/charge_scan_diagnostics.mjs'), await readFile('scripts/lib/charge_scan_diagnostics.mjs', 'utf8'));
     const original = "const HOST = 'ep-divine-mud-za5xlaae.c-2.eu-west-2.aws.neon.tech';";
     for (const file of ['collect_company_charges.mjs', 'stage_company_charge_scan.mjs', 'publish_company_charge_scan.mjs']) {
       let source = await readFile('scripts/lib/' + file, 'utf8');
@@ -79,8 +80,9 @@ async function main() {
     assert.equal(afterFailure.rows[0].status, 'outstanding'); assert.equal(afterFailure.rows[0].last_published_scan_id, first.scanId);
     await publish({ companyNumber: '00000000', scanId: second.scanId, pool, apply: true });
     assert.equal((await pool.query('SELECT status FROM public.charges')).rows[0].status, 'satisfied');
-    await assert.rejects(stage({ companyNumber: '00000000', pool, request: response('00000000', 'incomplete'), apply: true }), /CHARGE_SCAN_FAILED/);
-    const preserved = await pool.query("SELECT status, last_successful_scan_id, last_published_scan_id FROM ccod_import.company_charge_scan_state WHERE company_number = '00000000'");
+    await assert.rejects(stage({ companyNumber: '00000000', pool, request: response('00000000', 'incomplete'), apply: true }), error => error.message === 'CHARGE_PAGE_ENDED_EARLY');
+    const preserved = await pool.query("SELECT status, last_successful_scan_id, last_published_scan_id, last_error_code FROM ccod_import.company_charge_scan_state WHERE company_number = '00000000'");
+    assert.equal(preserved.rows[0].last_error_code, 'CHARGE_PAGE_ENDED_EARLY');
     assert.equal(preserved.rows[0].status, 'failed'); assert.equal(preserved.rows[0].last_successful_scan_id, second.scanId); assert.equal(preserved.rows[0].last_published_scan_id, second.scanId);
     const zero = await stage({ companyNumber: '00000001', pool, request: response('00000001'), apply: true });
     await publish({ companyNumber: '00000001', scanId: zero.scanId, pool, apply: true });
