@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { collectCompanyCharges } from './collect_company_charges.mjs';
+import { safeChargeScanDiagnostic } from './charge_scan_diagnostics.mjs';
 
 const HOST = 'ep-divine-mud-za5xlaae.c-2.eu-west-2.aws.neon.tech';
 const TARGET = 'england-wales-property-test';
@@ -61,9 +62,7 @@ export async function stageCompanyChargeScan({ companyNumber, pool, request, app
     if (transaction) {
       try { await client.query('ROLLBACK'); transaction = false; } catch { destroy = true; }
     }
-    const code = ['TARGET_GUARD_FAILED', 'COMPANY_OUTSIDE_APPROVED_SCOPE', 'COMPANY_SCAN_ALREADY_RUNNING',
-      'UNAPPROVED_DATABASE_ENDPOINT', 'COMPANY_IDENTITY_MISMATCH', 'PROPRIETOR_NAME_REQUIRES_REVIEW',
-      'INCOMPLETE_CHARGE_SCAN', 'SCAN_OWNERSHIP_LOST'].includes(error.message) ? error.message : 'CHARGE_SCAN_FAILED';
+    const code = safeChargeScanDiagnostic(error);
     if (started && !destroy) {
       try {
         await client.query(`UPDATE ccod_import.company_charge_scan_state
