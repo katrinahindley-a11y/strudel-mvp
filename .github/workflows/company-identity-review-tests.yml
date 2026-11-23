@@ -1,0 +1,31 @@
+name: Company identity review (synthetic only)
+
+on:
+  push:
+    branches: ['feat/company-identity-review']
+    paths:
+      - 'scripts/lib/company_identity_review.mjs'
+      - 'tests/company_identity_review.test.mjs'
+      - '.github/workflows/company-identity-review-tests.yml'
+  pull_request:
+    paths:
+      - 'scripts/lib/company_identity_review.mjs'
+      - 'tests/company_identity_review.test.mjs'
+      - '.github/workflows/company-identity-review-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  identity-review-node22:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run synthetic identity-review tests without application credentials
+        run: node --test tests/company_identity_review.test.mjs
