@@ -22,11 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: bfeceb435c018f6665abbcfd6a9fef440c34b70b
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify charge diagnostics before accessing credentials
+        run: node --test tests/charge_scan_diagnostics.test.mjs tests/stage_company_charge_scan.test.mjs
       - name: Install dependencies without lifecycle scripts
         run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
       - name: Stage approved company charge snapshots
@@ -64,6 +66,12 @@ jobs:
                 'COMPANY_OUTSIDE_APPROVED_SCOPE', 'COMPANY_SCAN_ALREADY_RUNNING',
                 'COMPANY_IDENTITY_MISMATCH', 'PROPRIETOR_NAME_REQUIRES_REVIEW',
                 'INCOMPLETE_CHARGE_SCAN', 'SCAN_OWNERSHIP_LOST', 'CHARGE_SCAN_FAILED',
+                'CHARGE_PAGE_INVALID', 'CHARGE_PAGINATION_INVALID',
+                'CHARGE_TOTAL_AVAILABILITY_CHANGED', 'CHARGE_TOTAL_INVALID',
+                'CHARGE_TOTAL_CHANGED', 'CHARGE_RECORD_INVALID',
+                'CHARGE_IDENTIFIER_MISSING', 'CHARGE_DUPLICATE_RECORD',
+                'CHARGE_COUNT_EXCEEDS_TOTAL', 'CHARGE_PAGE_ENDED_EARLY',
+                'CHARGE_PAGE_BUDGET_EXHAUSTED',
                 'INVALID_COMPANY_NUMBER', 'INVALID_ARGUMENTS', 'INVALID_REQUEST_BUDGET',
                 'REQUEST_BUDGET_EXHAUSTED', 'COMPANIES_HOUSE_RATE_LIMITED_STOP',
                 'COMPANIES_HOUSE_AUTHENTICATION_FAILED', 'COMPANIES_HOUSE_HTTP_FAILURE',

@@ -41,7 +41,7 @@ test('complete zero-charge scan is staged and committed atomically', async () =>
 });
 test('incomplete scan never writes a snapshot or successful state', async () => {
   const f = fixture({ partial: true });
-  await assert.rejects(stageCompanyChargeScan({ ...input(f), maxPages: 1 }), /CHARGE_SCAN_FAILED/);
+  await assert.rejects(stageCompanyChargeScan({ ...input(f), maxPages: 1 }), error => error.message === 'CHARGE_PAGE_BUDGET_EXHAUSTED');
   assert.equal(f.queries.some(q => q.sql.includes('INSERT INTO ccod_import.company_charge_scans')), false);
   assert.ok(f.queries.some(q => q.sql.includes("SET status = 'failed'")));
 });
