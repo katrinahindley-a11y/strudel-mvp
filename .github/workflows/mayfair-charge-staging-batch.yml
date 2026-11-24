@@ -1,96 +1,13 @@
-name: Mayfair charge staging batch
-
+name: Mayfair charge staging batch (ON HOLD)
 on:
   workflow_dispatch:
-    inputs:
-      company_numbers:
-        description: 'Comma-separated Companies House company numbers to stage'
-        required: true
-        type: string
-
 permissions:
   contents: read
-
-concurrency:
-  group: mayfair-charge-staging-batch
-  cancel-in-progress: false
-
 jobs:
-  stage:
+  hold:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Verify charge diagnostics before accessing credentials
-        run: node --test tests/charge_scan_diagnostics.test.mjs tests/stage_company_charge_scan.test.mjs tests/charge_http_diagnostics.test.mjs tests/company_profile_not_found.test.mjs
-      - name: Install dependencies without lifecycle scripts
-        run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
-      - name: Stage approved company charge snapshots
-        env:
-          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
-          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
-          COMPANY_NUMBERS: ${{ inputs.company_numbers }}
+      - name: Refuse live staging or publication
         run: |
-          node --input-type=module <<'NODE'
-          import { runManualImport } from './scripts/run_company_charge_import.mjs';
-          import { createChargeHttpDiagnostics } from './scripts/lib/charge_http_diagnostics.mjs';
-          const requested = (process.env.COMPANY_NUMBERS || '')
-            .split(',')
-            .map(value => value.trim())
-            .filter(Boolean);
-          if (!requested.length) {
-            console.error(JSON.stringify({ error: 'NO_COMPANY_NUMBERS_PROVIDED' }));
-            process.exitCode = 1;
-          }
-          const results = [];
-          for (const companyNumber of requested) {
-            let http;
-            try {
-              http = createChargeHttpDiagnostics(companyNumber);
-              const result = await runManualImport([
-                '--company', companyNumber,
-                '--max-pages', '10',
-                '--max-requests', '12',
-                '--apply'
-              ], process.env, { transport: { fetchFn: http.fetchFn } });
-              results.push({ companyNumber, status: 'staged', ...result });
-              console.log(JSON.stringify({ companyNumber, status: 'staged', scanId: result.scanId, charges: result.charges, pagesFetched: result.pagesFetched }));
-            } catch (error) {
-              const safeCodes = new Set([
-                'COMPANY_PROFILE_NOT_FOUND',
-                'TEST_DATABASE_URL_REQUIRED', 'INVALID_TEST_DATABASE_URL',
-                'UNAPPROVED_DATABASE_ENDPOINT', 'DATABASE_OVERRIDE_REJECTED',
-                'COMPANIES_HOUSE_KEY_REQUIRED', 'TARGET_GUARD_FAILED',
-                'COMPANY_OUTSIDE_APPROVED_SCOPE', 'COMPANY_SCAN_ALREADY_RUNNING',
-                'COMPANY_IDENTITY_MISMATCH', 'PROPRIETOR_NAME_REQUIRES_REVIEW',
-                'INCOMPLETE_CHARGE_SCAN', 'SCAN_OWNERSHIP_LOST', 'CHARGE_SCAN_FAILED',
-                'CHARGE_PAGE_INVALID', 'CHARGE_PAGINATION_INVALID',
-                'CHARGE_TOTAL_AVAILABILITY_CHANGED', 'CHARGE_TOTAL_INVALID',
-                'CHARGE_TOTAL_CHANGED', 'CHARGE_RECORD_INVALID',
-                'CHARGE_IDENTIFIER_MISSING', 'CHARGE_DUPLICATE_RECORD',
-                'CHARGE_COUNT_EXCEEDS_TOTAL', 'CHARGE_PAGE_ENDED_EARLY',
-                'CHARGE_PAGE_BUDGET_EXHAUSTED',
-                'INVALID_COMPANY_NUMBER', 'INVALID_ARGUMENTS', 'INVALID_REQUEST_BUDGET',
-                'REQUEST_BUDGET_EXHAUSTED', 'COMPANIES_HOUSE_RATE_LIMITED_STOP',
-                'COMPANIES_HOUSE_AUTHENTICATION_FAILED', 'COMPANIES_HOUSE_HTTP_FAILURE',
-                'COMPANIES_HOUSE_REQUEST_FAILED', 'COMPANIES_HOUSE_INVALID_JSON',
-                'UNAPPROVED_API_ENDPOINT', 'INVALID_API_PARAMETERS'
-              ]);
-              const diagnostic = safeCodes.has(error?.message) ? error.message : 'UNCLASSIFIED_BATCH_FAILURE';
-              const httpDetails = ['COMPANY_PROFILE_NOT_FOUND', 'COMPANIES_HOUSE_HTTP_FAILURE', 'COMPANIES_HOUSE_RATE_LIMITED_STOP', 'COMPANIES_HOUSE_AUTHENTICATION_FAILED'].includes(diagnostic) ? (http?.failureDetails() || {}) : {};
-              const identityReviewRequired = diagnostic === 'COMPANY_PROFILE_NOT_FOUND';
-              results.push({ companyNumber, status: 'failed', diagnostic, identityReviewRequired, ...httpDetails });
-              console.error(JSON.stringify({ companyNumber, error: 'MANUAL_CHARGE_IMPORT_FAILED', diagnostic, identityReviewRequired, ...httpDetails, note: 'No credentials, raw exception details or API responses are logged.' }));
-            }
-          }
-          const staged = results.filter(result => result.status === 'staged').length;
-          const failed = results.filter(result => result.status === 'failed').length;
-          console.log(JSON.stringify({ summary: { requested: requested.length, staged, failed }, results }));
-          if (failed) process.exitCode = 1;
-          NODE
+          echo 'CHARGE_OPERATIONS_ON_HOLD: separate rollout approval is required.'
+          exit 1

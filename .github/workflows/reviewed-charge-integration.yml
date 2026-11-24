@@ -34,12 +34,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Run reviewed staging and CLI tests with SQL-response fixtures
-        run: node --test tests/reviewed_charge_staging.test.mjs
+      - name: Run reviewed staging, CLI and lock-clock unit tests
+        run: node --test tests/reviewed_charge_staging.test.mjs tests/identity_review_lock_clock.test.mjs
       - name: Install Postgres driver without lifecycle scripts
         run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
-      - name: Test migrations, authentication and staging on disposable Postgres
+      - name: Test migrations, authentication, concurrency and lock-wait expiry
         env:
           RUN_REVIEWED_POSTGRES: '1'
           CHARGE_CI_DATABASE_URL: postgresql://charge_ci:disposable_ci_only@localhost:5432/neondb
-        run: node --test tests/reviewed_charge_postgres.test.mjs
+        run: |
+          node --test tests/reviewed_charge_postgres.test.mjs
+          node --test tests/reviewed_charge_lock_wait.test.mjs
