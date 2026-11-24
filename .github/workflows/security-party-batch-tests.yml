@@ -1,0 +1,25 @@
+name: Secured-party batch unit tests (synthetic only)
+
+on:
+  push:
+    branches: ['feat/security-party-search']
+    paths: ['scripts/**', 'tests/**', '.github/workflows/security-party-batch-tests.yml']
+  pull_request:
+    paths: ['scripts/**', 'tests/**', '.github/workflows/security-party-batch-tests.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-batch-node22-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test orchestration with simulated SQL and HTTP; no live credentials
+        run: node --test tests/reviewed_charge_batch.test.mjs
