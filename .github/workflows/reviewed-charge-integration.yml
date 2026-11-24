@@ -40,5 +40,6 @@ jobs:
         run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
       - name: Test migrations, authentication and staging on disposable Postgres
         env:
+          RUN_REVIEWED_POSTGRES: '1'
           CHARGE_CI_DATABASE_URL: postgresql://charge_ci:disposable_ci_only@localhost:5432/neondb
         run: node --test tests/reviewed_charge_postgres.test.mjs

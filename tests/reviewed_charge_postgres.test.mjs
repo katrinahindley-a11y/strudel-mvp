@@ -5,10 +5,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
-import pg from 'pg';
+import {runReviewedConcurrencyTests} from './reviewed_charge_concurrency_helpers.mjs';
 import {createIdentityProposal} from '../scripts/lib/company_identity_review.mjs';
-test('actual reviewed staging on disposable Postgres',async t=>{
+test('actual reviewed staging on disposable Postgres', {skip:process.env.RUN_REVIEWED_POSTGRES!=='1'}, async t=>{
   if(process.env.GITHUB_ACTIONS!=='true')throw Error('GITHUB_ACTIONS_ONLY');
+  const {default:pg}=await import('pg');
   const url=new URL(process.env.CHARGE_CI_DATABASE_URL||'');
   if(url.protocol!=='postgresql:'||url.hostname!=='localhost'||url.port!=='5432'||url.pathname!=='/neondb'||url.username!=='charge_ci'||url.search||url.hash)throw Error('DISPOSABLE_DATABASE_REQUIRED');
   globalThis.fetch=async()=>{throw Error('NETWORK_REQUESTS_DISABLED');};
@@ -47,6 +48,7 @@ test('actual reviewed staging on disposable Postgres',async t=>{
     let good;
     await t.test('approved correction stages once and keeps raw source',async()=>{const r=await approved(),c=call(r);good=await c.promise;assert.equal(c.calls(),2);assert.deepEqual(await counts(),{scans:1,bindings:1});assert.deepEqual((await owner.query('SELECT registration_number_raw,company_number_candidate FROM public.property_proprietors')).rows[0],{registration_number_raw:'001234',company_number_candidate:'00001234'});const second=call(r);await assert.rejects(second.promise,/IDENTITY_SCAN_ALREADY_USED/);assert.equal(second.calls(),0);await owner.query('UPDATE ccod_import.company_charge_scan_state SET last_published_scan_id=$1',[good.scanId]);});
     for(const mode of ['404','incomplete'])await t.test(mode+' preserves prior pointers',async()=>{const before=await counts(),c=call(await approved(),mode);await assert.rejects(c.promise,mode==='404'?/COMPANY_PROFILE_NOT_FOUND/:/CHARGE_PAGE_ENDED_EARLY/);assert.deepEqual(await counts(),before);const row=(await owner.query('SELECT last_successful_scan_id,last_published_scan_id FROM ccod_import.company_charge_scan_state')).rows[0];assert.equal(row.last_successful_scan_id,good.scanId);assert.equal(row.last_published_scan_id,good.scanId);});
+    await runReviewedConcurrencyTests(t,{owner,scanner,stage,number,profile,approved,create,decide,counts});
     await t.test('history is immutable',async()=>{await assert.rejects(owner.query("UPDATE ccod_import.identity_review_events SET rationale='changed'"),/IDENTITY_REVIEW_APPEND_ONLY/);await assert.rejects(owner.query('DELETE FROM ccod_import.identity_review_proposals'),/IDENTITY_REVIEW_APPEND_ONLY/);await assert.rejects(owner.query('TRUNCATE ccod_import.identity_review_scan_bindings'),/IDENTITY_REVIEW_APPEND_ONLY/);});
   }finally{await Promise.all(pools.map(p=>p.end()));await owner.end();await rm(temp,{recursive:true,force:true});}
 });
