@@ -4,14 +4,14 @@ import { safeChargeScanDiagnostic } from './charge_scan_diagnostics.mjs';
 import { assertReviewReference,loadReviewedIdentity } from './company_identity_store.mjs';
 const HOST = 'ep-divine-mud-za5xlaae.c-2.eu-west-2.aws.neon.tech';
 const reviewCodes = new Set(['IDENTITY_REVIEW_REQUIRED','IDENTITY_TARGET_MISMATCH','IDENTITY_REVIEW_NOT_APPROVED','IDENTITY_REVIEW_EXPIRED','IDENTITY_SOURCE_CHANGED','IDENTITY_EVIDENCE_STALE','IDENTITY_SOURCE_OR_PROFILE_MISMATCH','IDENTITY_AUTHORIZATION_CHANGED','IDENTITY_SCAN_ALREADY_USED']);
-export async function stageCompanyChargeScan({ companyNumber,pool,request,identityReview,apply=false,maxPages=10 } = {}) {
+export async function stageCompanyChargeScan({ companyNumber,pool,request,identityReview,apply=false,maxPages=10,registerBeforeDispatch } = {}) {
   if (!/^(?:[0-9]{8}|[A-Z]{2}[0-9]{6})$/.test(companyNumber || '')) throw Error('INVALID_COMPANY_NUMBER');
   if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) throw Error('INVALID_PAGE_BUDGET');
   if (apply !== true) return { mode:'dry_run',companyNumber,maxPages,executed:false };
   assertReviewReference(identityReview);
-  if (typeof request !== 'function' || !pool || typeof pool.connect !== 'function') throw Error('MISSING_DEPENDENCY');
+  if (typeof request !== 'function' || !pool || typeof pool.connect !== 'function' || (registerBeforeDispatch!==undefined && typeof registerBeforeDispatch!=='function')) throw Error('MISSING_DEPENDENCY');
   const c = await pool.connect(), token = randomUUID();
-  let transaction=false,destroy=false;
+  let transaction=false,destroy=false,dispatchProfile;
   try {
     if (c.connectionParameters?.host !== HOST || c.connectionParameters?.database !== 'neondb') throw Error('UNAPPROVED_DATABASE_ENDPOINT');
     await c.query('BEGIN ISOLATION LEVEL READ COMMITTED'); transaction=true;
@@ -20,9 +20,13 @@ export async function stageCompanyChargeScan({ companyNumber,pool,request,identi
     const first = await loadReviewedIdentity(c,identityReview,companyNumber);
     const used = await c.query('SELECT scan_id FROM ccod_import.identity_review_scan_bindings WHERE scan_event=$1',[first.scanEvent]);
     if (used.rows.length) throw Error('IDENTITY_SCAN_ALREADY_USED');
+    if(registerBeforeDispatch)registerBeforeDispatch(async()=>{
+      const current=await loadReviewedIdentity(c,identityReview,companyNumber,dispatchProfile);
+      if(String(current.identityEvent)!==String(first.identityEvent)||String(current.scanEvent)!==String(first.scanEvent))throw Error('IDENTITY_AUTHORIZATION_CHANGED');
+    });
     const company = await request('/company/'+companyNumber);
     if (company?.company_number !== companyNumber || !company.company_name) throw Error('COMPANY_IDENTITY_MISMATCH');
-    await loadReviewedIdentity(c,identityReview,companyNumber,company);
+    await loadReviewedIdentity(c,identityReview,companyNumber,company);dispatchProfile=company;
     const scan = await collectCompanyCharges(companyNumber,request,{maxPages});
     if (scan.scanComplete !== true) throw Error('INCOMPLETE_CHARGE_SCAN');
     const final = await loadReviewedIdentity(c,identityReview,companyNumber,company);
@@ -37,5 +41,5 @@ export async function stageCompanyChargeScan({ companyNumber,pool,request,identi
   } catch (error) {
     if (transaction) try { await c.query('ROLLBACK'); } catch { destroy=true; }
     throw Error(reviewCodes.has(error?.message) ? error.message : safeChargeScanDiagnostic(error));
-  } finally { c.release(destroy); }
+  } finally { try{if(registerBeforeDispatch)registerBeforeDispatch(null);}finally{c.release(destroy);} }
 }
