@@ -1,72 +1,13 @@
-name: Nautilina charge staging pilot
-
+name: Nautilina charge staging pilot (ON HOLD)
 on:
   workflow_dispatch:
-
 permissions:
   contents: read
-
-concurrency:
-  group: nautilina-charge-staging-pilot
-  cancel-in-progress: false
-
 jobs:
-  stage:
+  hold:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: bfeceb435c018f6665abbcfd6a9fef440c34b70b
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install dependencies without lifecycle scripts
-        run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
-      - name: Stage Nautilina charge snapshot with safe diagnostics
-        env:
-          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
-          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
+      - name: Refuse live staging or publication
         run: |
-          node --input-type=module <<'NODE'
-          import { runManualImport } from './scripts/run_company_charge_import.mjs';
-          const safeMessages = new Set([
-            'TEST_DATABASE_URL_REQUIRED', 'INVALID_TEST_DATABASE_URL',
-            'UNAPPROVED_DATABASE_ENDPOINT', 'DATABASE_OVERRIDE_REJECTED',
-            'COMPANIES_HOUSE_KEY_REQUIRED', 'TARGET_GUARD_FAILED',
-            'COMPANY_OUTSIDE_APPROVED_SCOPE', 'COMPANY_SCAN_ALREADY_RUNNING',
-            'COMPANY_IDENTITY_MISMATCH', 'PROPRIETOR_NAME_REQUIRES_REVIEW',
-            'INCOMPLETE_CHARGE_SCAN', 'SCAN_OWNERSHIP_LOST', 'CHARGE_SCAN_FAILED'
-          ]);
-          const connectionCodes = new Map([
-            ['28P01', 'DATABASE_AUTHENTICATION_FAILED'],
-            ['28000', 'DATABASE_AUTHORIZATION_FAILED'],
-            ['42501', 'DATABASE_PERMISSION_DENIED'],
-            ['42P01', 'DATABASE_TABLE_MISSING'],
-            ['42703', 'DATABASE_COLUMN_MISSING'],
-            ['ENOTFOUND', 'DATABASE_DNS_FAILED'],
-            ['ECONNREFUSED', 'DATABASE_CONNECTION_REFUSED'],
-            ['ETIMEDOUT', 'DATABASE_CONNECTION_TIMED_OUT'],
-            ['ECONNRESET', 'DATABASE_CONNECTION_RESET'],
-            ['CERT_HAS_EXPIRED', 'DATABASE_TLS_FAILED'],
-            ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DATABASE_TLS_FAILED'],
-            ['SELF_SIGNED_CERT_IN_CHAIN', 'DATABASE_TLS_FAILED']
-          ]);
-          try {
-            const result = await runManualImport([
-              '--company', '15372161', '--max-pages', '10',
-              '--max-requests', '12', '--apply'
-            ]);
-            console.log(JSON.stringify(result));
-          } catch (error) {
-            const diagnostic = safeMessages.has(error?.message)
-              ? error.message
-              : connectionCodes.get(error?.code) || 'UNCLASSIFIED_PILOT_FAILURE';
-            console.error(JSON.stringify({
-              error: 'MANUAL_CHARGE_IMPORT_FAILED', diagnostic,
-              note: 'No credentials, raw exception details or API responses are logged. Inspect tracking state before retrying.'
-            }));
-            process.exitCode = 1;
-          }
-          NODE
+          echo 'CHARGE_OPERATIONS_ON_HOLD: separate rollout approval is required.'
+          exit 1

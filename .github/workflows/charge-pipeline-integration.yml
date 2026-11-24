@@ -39,8 +39,8 @@ jobs:
           node-version: '22'
       - name: Install test dependencies without lifecycle scripts
         run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
-      - name: Run charge component tests
-        run: node --test tests/collect_company_charges.test.mjs tests/stage_company_charge_scan.test.mjs tests/publish_company_charge_scan.test.mjs tests/run_company_charge_import.test.mjs
+      - name: Run charge component and diagnostic tests
+        run: node --test tests/collect_company_charges.test.mjs tests/stage_company_charge_scan.test.mjs tests/publish_company_charge_scan.test.mjs tests/run_company_charge_import.test.mjs tests/charge_scan_diagnostics.test.mjs tests/charge_http_diagnostics.test.mjs tests/company_profile_not_found.test.mjs
       - name: Run JavaScript pipeline against real disposable Postgres
         env:
           CHARGE_CI_DATABASE_URL: postgresql://charge_ci:disposable_ci_only@localhost:5432/neondb

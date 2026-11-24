@@ -1,82 +1,13 @@
-name: Mayfair charge publication batch
-
+name: Mayfair charge publication batch (ON HOLD)
 on:
   workflow_dispatch:
-    inputs:
-      publish_pairs:
-        description: 'Comma-separated company_number,scan_id pairs to publish'
-        required: true
-        type: string
-
 permissions:
   contents: read
-
-concurrency:
-  group: mayfair-charge-publish-batch
-  cancel-in-progress: false
-
 jobs:
-  publish:
+  hold:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: bfeceb435c018f6665abbcfd6a9fef440c34b70b
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install dependencies without lifecycle scripts
-        run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
-      - name: Publish approved company charge snapshots
-        env:
-          CCOD_TEST_DATABASE_URL: ${{ secrets.CCOD_TEST_DATABASE_URL }}
-          PUBLISH_PAIRS: ${{ inputs.publish_pairs }}
+      - name: Refuse live staging or publication
         run: |
-          node --input-type=module <<'NODE'
-          import { runManualImport } from './scripts/run_company_charge_import.mjs';
-          const pairs = (process.env.PUBLISH_PAIRS || '')
-            .split(',')
-            .map(value => value.trim())
-            .filter(Boolean)
-            .map(value => {
-              const [companyNumber, scanId] = value.split(':');
-              return { companyNumber, scanId };
-            });
-          if (!pairs.length || pairs.some(pair => !pair.companyNumber || !pair.scanId)) {
-            console.error(JSON.stringify({ error: 'INVALID_PUBLISH_PAIRS' }));
-            process.exitCode = 1;
-          }
-          const results = [];
-          for (const pair of pairs) {
-            try {
-              const result = await runManualImport([
-                '--company', pair.companyNumber,
-                '--publish-scan', pair.scanId,
-                '--apply'
-              ]);
-              results.push({ ...pair, status: 'published', charges: result.charges });
-              console.log(JSON.stringify({ companyNumber: pair.companyNumber, scanId: pair.scanId, status: 'published', charges: result.charges }));
-            } catch (error) {
-              const safeCodes = new Set([
-                'TEST_DATABASE_URL_REQUIRED', 'INVALID_TEST_DATABASE_URL',
-                'UNAPPROVED_DATABASE_ENDPOINT', 'DATABASE_OVERRIDE_REJECTED',
-                'TARGET_GUARD_FAILED', 'SCAN_NOT_CURRENT_COMPLETE_OR_FRESH',
-                'INVALID_CHARGE_SNAPSHOT', 'PROPRIETOR_NAME_REQUIRES_REVIEW',
-                'MISSING_CHARGE_IDENTIFIER', 'DUPLICATE_INCOMING_CHARGE',
-                'AMBIGUOUS_STORED_CHARGE', 'DUPLICATE_OUTPUT_IDENTIFIER',
-                'STORED_CHARGES_MISSING_FROM_SNAPSHOT_REVIEW_REQUIRED',
-                'PUBLICATION_OWNERSHIP_LOST', 'CHARGE_PUBLICATION_FAILED',
-                'INVALID_COMPANY_NUMBER', 'INVALID_SCAN_ID', 'INVALID_ARGUMENTS'
-              ]);
-              const diagnostic = safeCodes.has(error?.message) ? error.message : 'UNCLASSIFIED_PUBLICATION_FAILURE';
-              results.push({ ...pair, status: 'failed', diagnostic });
-              console.error(JSON.stringify({ companyNumber: pair.companyNumber, scanId: pair.scanId, error: 'CHARGE_PUBLICATION_FAILED', diagnostic, note: 'No credentials, raw exception details or API responses are logged.' }));
-            }
-          }
-          const published = results.filter(result => result.status === 'published').length;
-          const failed = results.filter(result => result.status === 'failed').length;
-          console.log(JSON.stringify({ summary: { requested: pairs.length, published, failed }, results }));
-          if (failed) process.exitCode = 1;
-          NODE
+          echo 'CHARGE_OPERATIONS_ON_HOLD: separate rollout approval is required.'
+          exit 1
