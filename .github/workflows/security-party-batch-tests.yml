@@ -1,4 +1,4 @@
-name: Secured-party batch verification (disposable database)
+name: Secured-party batch and scope verification (disposable database)
 
 on:
   push:
@@ -34,15 +34,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Test batch orchestration through the actual HTTP client with synthetic responses
-        run: node --test tests/reviewed_charge_batch.test.mjs
+      - name: Test batch transport and full-scope qualification with synthetic data
+        run: node --test tests/reviewed_charge_batch.test.mjs tests/scoped_charge_plan.test.mjs
       - name: Install PostgreSQL driver without lifecycle scripts
         run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
-      - name: Verify restricted-role fixtures then real batch transactions and transport
+      - name: Verify staging, batches and read-only planning in dependency order
         env:
           RUN_REVIEWED_POSTGRES: '1'
           RUN_REVIEWED_BATCH_POSTGRES: '1'
+          RUN_SCOPE_PLANNER_POSTGRES: '1'
           CHARGE_CI_DATABASE_URL: postgresql://charge_ci:disposable_ci_only@localhost:5432/neondb
         run: |
           node --test tests/reviewed_charge_postgres.test.mjs
           node --test tests/reviewed_charge_batch_postgres.test.mjs
+          node --test tests/scoped_charge_plan_postgres.test.mjs
