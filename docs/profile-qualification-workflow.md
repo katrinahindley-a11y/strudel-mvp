@@ -1,0 +1,13 @@
+# Profile discovery and automatic review: shadow build
+
+Base: PR #16 head bba4f63. Code only; no live execution or policy activation. The app review schema was separately deployed and is empty; reviewer/collector accounts are not enrolled. PR #16 remains unmerged.
+
+The driver reads the full scoped inventory, deduplicates candidates, reuses consistent profiles observed within seven days, and plans at most 100 companies per run without a dataset cap. It binds source hashes, cache content, budgets, expiry and company selection to an operator-confirmed manifest hash. This hash is an integrity/scope check, not a digital signature or independent authority. CLI access and credentials remain trusted privileges. Preview reads the guarded database but makes no Companies House request. --apply additionally requires the matching hash and explicit budgets/expiry; credentials are needed only for fetch entries. Only /company/{number} is requested, never charges. Pacing is process-local, not account-wide.
+
+After discovery, re-read scope. Strict policy ccod-exact-profile-shadow-v1 holds changed sources, noncanonical raw registrations, number/name mismatches, stale profiles, unsupported forms and non-active companies. It supports active ltd/plc only, trims outer registration whitespace but never adds digits/prefixes, ignores selected name punctuation/case/spacing, preserves ampersands and does not expand Ltd/Limited or accept historical aliases.
+
+Outputs are eligible_for_automatic_review or hold, always approved=false, scanAuthorized=false and propertySecurityVerified=false. No proposal/event writer, policy activation, role enrollment, scan scheduling, database profile cache or publication is implemented. Observations go only to a private 0600, non-overwriting file. No fabricated ownership-evidence URL is created. An authorised writer and approved versioned policy must be built and activated before shadow matches become real approvals.
+
+404 is an exception, never zero charges. Auth/rate-limit/transport errors, budgets and grant expiry stop the run without automatic retries. resumeAfterCompany does not skip a failed lookup. A failure marker warns that requests may have occurred before report failure; no persistent queue/crash-resume guarantee exists.
+
+40 local Node 20.20.2 tests passed with the unchanged HTTP-client function and synthetic fetch. Three PostgreSQL scenarios are prepared after the existing planner fixtures, testing actual read-only source access, canonical cached matching without HTTP, source-change holds and no program writes. PostgreSQL execution is pending; exact-head Node 22/PG CI is required. No Neon change, live grant/API call, remapping, publication, schedule or merge is authorised. Existing holds remain.

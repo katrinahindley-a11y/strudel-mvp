@@ -1,0 +1,52 @@
+name: Secured-party profile, batch and scope verification (disposable database)
+
+on:
+  push:
+    branches: ['feat/security-party-search']
+    paths: ['scripts/**', 'tests/**', 'migrations/**', '.github/workflows/security-party-batch-tests.yml']
+  pull_request:
+    paths: ['scripts/**', 'tests/**', 'migrations/**', '.github/workflows/security-party-batch-tests.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-batch-node22-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: charge_ci
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U charge_ci -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test profile-only discovery, shadow review, batch transport and scope
+        run: node --test tests/profile_qualification.test.mjs tests/reviewed_charge_batch.test.mjs tests/scoped_charge_plan.test.mjs
+      - name: Install PostgreSQL driver without lifecycle scripts
+        run: npm install --no-save --ignore-scripts --package-lock=false --no-audit --no-fund pg@8.13.1
+      - name: Verify staging, batches, planning and shadow qualification in dependency order
+        env:
+          RUN_REVIEWED_POSTGRES: '1'
+          RUN_REVIEWED_BATCH_POSTGRES: '1'
+          RUN_SCOPE_PLANNER_POSTGRES: '1'
+          RUN_PROFILE_QUALIFICATION_POSTGRES: '1'
+          CHARGE_CI_DATABASE_URL: postgresql://charge_ci:disposable_ci_only@localhost:5432/neondb
+        run: |
+          node --test tests/reviewed_charge_postgres.test.mjs
+          node --test tests/reviewed_charge_batch_postgres.test.mjs
+          node --test tests/scoped_charge_plan_postgres.test.mjs
+          node --test tests/profile_qualification_postgres.test.mjs
